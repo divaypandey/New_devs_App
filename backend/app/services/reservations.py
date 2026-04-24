@@ -2,9 +2,9 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Dict, Any, List
 
-async def calculate_monthly_revenue(property_id: str, month: int, year: int, db_session=None) -> Decimal:
+async def calculate_monthly_revenue(property_id: str, tenant_id: str, month: int, year: int, db_session=None) -> Decimal:
     """
-    Calculates revenue for a specific month.
+    Calculates revenue for a specific month. Not sure where it's getting called from though
     """
 
     start_date = datetime(year, month, 1)
@@ -12,19 +12,28 @@ async def calculate_monthly_revenue(property_id: str, month: int, year: int, db_
         end_date = datetime(year, month + 1, 1)
     else:
         end_date = datetime(year + 1, 1, 1)
-        
-    print(f"DEBUG: Querying revenue for {property_id} from {start_date} to {end_date}")
+    
+    #we're not getting property here, if we did, we'd use its timezone to convert these to UTC before querying the DB.
+    #prop_tz = pytz.timezone(property_timezone)  #from the properties table
+    #start_date = prop_tz.localize(datetime(year, month, 1, 0, 0, 0)) 
+
+    #like above
+    print(f"DEBUG: Querying revenue for {property_id} AND {tenant_id} (change) from {start_date} to {end_date}")
 
     # SQL Simulation (This would be executed against the actual DB)
     query = """
-        SELECT SUM(total_amount) as total
+        SELECT SUM(
+            total_amount
+            * EXTRACT(epoch FROM (LEAST(check_out_date, $4) - GREATEST(check_in_date, $3)))
+            / EXTRACT(epoch FROM (check_out_date - check_in_date))
+        ) as total
         FROM reservations
         WHERE property_id = $1
         AND tenant_id = $2
-        AND check_in_date >= $3
-        AND check_in_date < $4
+        AND check_in_date < $4 
+        AND check_out_date > $3 
     """
-    
+    #used extract epoch since schema says they're stored as timestamps.
     # In production this query executes against a database session.
     # result = await db.fetch_val(query, property_id, tenant_id, start_date, end_date)
     # return result or Decimal('0')
@@ -37,11 +46,10 @@ async def calculate_total_revenue(property_id: str, tenant_id: str) -> Dict[str,
     """
     try:
         # Import database pool
-        from app.core.database_pool import DatabasePool
-        
+        from app.core.database_pool import db_pool #use global instance   
         # Initialize pool if needed
-        db_pool = DatabasePool()
-        await db_pool.initialize()
+        #db_pool = DatabasePool()
+        #await db_pool.initialize() DONT INITIALSE AGAIN
         
         if db_pool.session_factory:
             async with db_pool.get_session() as session:

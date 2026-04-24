@@ -39,7 +39,7 @@ BEGIN
   WHERE user_id = v_user_id
   AND is_active = true
   ORDER BY is_owner DESC, created_at DESC
-  LIMIT 1;
+  LIMIT 1; --This way of assuming tenant can cause leaks, ideally tenant should be provided as arg OR added later on after user creation
   
   -- Insert default dashboard permission for all users
   INSERT INTO user_permissions (user_id, section, action, tenant_id)
